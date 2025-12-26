@@ -1,0 +1,19 @@
+# LangChain4j框架的配置节点
+langchain4j:
+  community:
+    dashscope:
+      chat-model:
+        model-name: qwen3-coder-plus
+        api-key: sk-19faefdb618f41c8a27a74622721ab8a
+        # 嵌入模型配置
+        # 用于将文本转换为向量表示，适用于语义搜索、文本相似度计算等场景
+      embedding-model:
+          # 该模型专门用于生成高质量的文本向量嵌入
+        model-name: text-embedding-v4
+          # 与聊天模型使用相同的API密钥
+        api-key: sk-19faefdb618f41c8a27a74622721ab8a
+      streaming-chat-model:
+          # 指定使用的模型名称
+          model-name: qwen3-coder-plus
+        # 与聊天模型使用相同的API密钥
+          api-key: sk-19faefdb618f41c8a27a74622721ab8a

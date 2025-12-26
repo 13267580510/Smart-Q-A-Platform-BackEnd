@@ -1,0 +1,115 @@
+我的springboot代码如下，但是前端发送登录请求都会返回403：
+//SecurityConfig.java
+package org.example.backend.config;
+
+import org.example.backend.filter.JwtAuthenticationFilter;
+import org.example.backend.service.UserService;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.password.NoOpPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.regex.Pattern;
+
+import static org.example.backend.model.UserRole.ADMIN;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, UserService userService) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.userService = userService;
+    }
+
+    private final UserService userService;
+
+    // 用于从字符串中提取权限的正则表达式
+    private static final Pattern AUTHORITY_PATTERN = Pattern.compile("\\[(.*?)\\]");
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        System.out.println("安全检查开始：");
+        HttpSecurity user = http
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth
+                        // 允许匿名访问的路径
+                        .requestMatchers(
+                                "/auth/**",
+                                "/uploads/**",
+                                "/api/questions/**",
+                                "/api/answers/**",
+                                "/upload/**",
+                                "/api/questions",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**"
+
+                        ).permitAll()
+
+                        // 只有 ADMIN 角色可以访问封禁和解封用户的 API
+                        .requestMatchers("/api/reports/{reportId}/ban", "/api/reports/{userId}/unban","/api/reports/*","/api/admin/questions/**","/api/admin/answers/**")
+                        .hasRole("ADMIN")
+                        // 需要 USER 或 ADMIN 角色认证的路径
+                        .requestMatchers("/api/questions/**", "/api/answers/**", "/api/questions/{id}/like", "/api/reports/**","/api/UserInfo/**","/api/admin/**")
+                        .hasAnyRole("USER", "ADMIN")
+                        .anyRequest().authenticated() // 其他请求需要认证
+
+                )
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+                .authenticationProvider(authenticationProvider())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()));
+
+        return http.build();
+    }
+
+
+
+    @Bean
+    public DaoAuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        authProvider.setUserDetailsService(userService); // 设置自定义 UserDetailsService
+        authProvider.setPasswordEncoder(passwordEncoder());
+        return authProvider;
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return NoOpPasswordEncoder.getInstance();
+    }
+
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
+        return authConfig.getAuthenticationManager();
+    }
+
+    @Bean
+    public UrlBasedCorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.addAllowedOriginPattern("*");
+        configuration.addAllowedMethod("OPTIONS");
+        configuration.addAllowedMethod("*");
+        configuration.addAllowedHeader("Content-Type");
+        configuration.addAllowedHeader("Authorization");
+        configuration.setAllowCredentials(true);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+}
