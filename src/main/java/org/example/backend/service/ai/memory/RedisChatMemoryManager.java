@@ -2,10 +2,10 @@ package org.example.backend.service.ai.memory;
 
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+import org.example.backend.config.CacheKeyConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-import  org.example.backend.service.ai.memory.RedisChatMemoryStore;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -15,12 +15,10 @@ public class RedisChatMemoryManager {
 
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
-    @Autowired  // 添加这个注解，让Spring注入RedisChatMemoryStore
-    private RedisChatMemoryStore redisChatMemoryStore;
+
 
     // Redis键前缀
-    private static final String CHAT_MEMORY_KEY_PREFIX = "chat:memory:";
-    private static final String CHAT_MESSAGES_KEY_PREFIX = "chat:messages:";
+    //private static final String CHAT_MESSAGES_KEY_PREFIX = "chat:messages:";
 
     // 过期时间配置
     private static final Duration DEFAULT_TTL = Duration.ofHours(24);
@@ -41,11 +39,12 @@ public class RedisChatMemoryManager {
         }
 
         // 延长Redis中聊天内存的过期时间
-        String memoryKey = CHAT_MEMORY_KEY_PREFIX + memoryId;
+        String memoryKey = CacheKeyConfig.buildMemoryKey(memoryId);
+        String messagesKey = CacheKeyConfig.buildMessagesKey(memoryId);
+
         redisTemplate.expire(memoryKey, DEFAULT_TTL);
 
         // 延长消息存储的过期时间
-        String messagesKey = CHAT_MESSAGES_KEY_PREFIX + memoryId;
         redisTemplate.expire(messagesKey, DEFAULT_TTL);
 
         // 创建ChatMemory并配置Redis存储
@@ -65,8 +64,8 @@ public class RedisChatMemoryManager {
         }
 
         // 删除聊天内存相关的所有Redis键
-        String memoryKey = CHAT_MEMORY_KEY_PREFIX + memoryId;
-        String messagesKey = CHAT_MESSAGES_KEY_PREFIX + memoryId;
+        String memoryKey = CacheKeyConfig.buildMemoryKey(memoryId);
+        String messagesKey = CacheKeyConfig.buildMessagesKey(memoryId);
 
         redisTemplate.delete(memoryKey);
         redisTemplate.delete(messagesKey);
@@ -93,8 +92,8 @@ public class RedisChatMemoryManager {
             return false;
         }
 
-        String memoryKey = CHAT_MEMORY_KEY_PREFIX + memoryId;
-        String messagesKey = CHAT_MESSAGES_KEY_PREFIX + memoryId;
+        String memoryKey = CacheKeyConfig.buildMemoryKey(memoryId);
+        String messagesKey = CacheKeyConfig.buildMessagesKey(memoryId);
 
         Boolean hasMemory = redisTemplate.hasKey(memoryKey);
         Boolean hasMessages = redisTemplate.hasKey(messagesKey);
@@ -111,8 +110,8 @@ public class RedisChatMemoryManager {
             return;
         }
 
-        String memoryKey = CHAT_MEMORY_KEY_PREFIX + memoryId;
-        String messagesKey = CHAT_MESSAGES_KEY_PREFIX + memoryId;
+        String memoryKey = CacheKeyConfig.buildMemoryKey(memoryId);
+        String messagesKey = CacheKeyConfig.buildMessagesKey(memoryId);
 
         // 延长过期时间
         if (Boolean.TRUE.equals(redisTemplate.hasKey(memoryKey))) {

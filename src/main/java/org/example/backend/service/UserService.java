@@ -168,7 +168,7 @@ public class UserService implements UserDetailsService {
             }
         } else {
             System.out.println("创建普通用户");
-            user.setRole(UserRole.USER);
+            user.setRole(User.UserRole.USER);
         }
 
         // 7. 保存用户

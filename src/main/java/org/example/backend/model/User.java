@@ -64,7 +64,9 @@ public class User implements UserDetails {
 
     @Enumerated(EnumType.STRING)
     private UserRole role;
-
+    public enum UserRole {
+        USER,ADMIN
+    }
     @Column(name = "nickname", nullable = false)
     private String nickname;
 
@@ -111,6 +113,7 @@ public class User implements UserDetails {
     public enum Gender {
         MAN,WOMAN
     }
+
 
     @Override
     public String toString() {

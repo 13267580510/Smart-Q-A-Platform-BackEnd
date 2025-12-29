@@ -5,6 +5,11 @@
     <groupId>org.example</groupId>
     <artifactId>backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.0</version>        <!-- 或者使用更新的版本 -->
+    </parent>
     <name>backend</name>
     <description>backend</description>
     <properties>
@@ -142,13 +147,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Fastjson -->
-        <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>fastjson</artifactId>
-            <version>2.0.24</version>
-        </dependency>
-
         <!-- SpringLoaded -->
         <dependency>
             <groupId>org.springframework</groupId>
@@ -188,6 +186,17 @@
             <artifactId>commons-io</artifactId>
             <version>2.13.0</version>
         </dependency>
+
+        <dependency>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2</artifactId>
+            <version>2.0.60</version>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2-extension-spring5</artifactId>
+            <version>2.0.60</version>
+        </dependency>
     </dependencies>
 
     <dependencyManagement>
@@ -208,6 +217,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>3.2.0</version>
             </plugin>
             <!-- 统一编译插件配置，适配Java21 -->
             <plugin>

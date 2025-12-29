@@ -1,4 +1,3 @@
-// FileInfoRepository.java
 package org.example.backend.repository;
 
 import org.example.backend.model.FileInfo;
@@ -20,6 +19,7 @@ public interface FileInfoRepository extends JpaRepository<FileInfo, Long> {
 
     Optional<FileInfo> findByMd5(String md5);
 
+    // 返回List的方法
     List<FileInfo> findByCategory(String category);
 
     List<FileInfo> findByUploadStatus(String uploadStatus);
@@ -28,6 +28,7 @@ public interface FileInfoRepository extends JpaRepository<FileInfo, Long> {
 
     List<FileInfo> findByUploaderAndCategory(User uploader, String category);
 
+    // 返回Page的方法
     Page<FileInfo> findByUploader(User uploader, Pageable pageable);
 
     // 只查询已完成的文件
@@ -36,7 +37,7 @@ public interface FileInfoRepository extends JpaRepository<FileInfo, Long> {
     Page<FileInfo> findByUploadStatus(String status, Pageable pageable);
 
     // 按分类查询已完成的文件
-    List<FileInfo> findByCategoryAndUploadStatusOrderByCreateTimeDesc(String category, String status);
+    List<FileInfo> findByCategoryAndUploadStatus(String category, String status);
 
     Page<FileInfo> findByCategoryAndUploadStatus(String category, String status, Pageable pageable);
 
@@ -51,7 +52,6 @@ public interface FileInfoRepository extends JpaRepository<FileInfo, Long> {
     @Query("SELECT SUM(f.fileSize) FROM FileInfo f WHERE f.uploader = :uploader AND f.uploadStatus = 'completed'")
     Long sumFileSizeByUploader(@Param("uploader") User uploader);
 
-    // 清理过期上传记录
-    @Query("DELETE FROM FileInfo f WHERE f.uploadStatus = 'uploading' AND f.createTime < :expireTime")
-    int deleteExpiredUploadingRecords(@Param("expireTime") LocalDateTime expireTime);
+    // 获取按分类和状态排序的文件列表
+    List<FileInfo> findByCategoryAndUploadStatusOrderByCreateTimeDesc(String category, String status);
 }

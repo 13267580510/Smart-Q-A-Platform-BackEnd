@@ -1,4 +1,3 @@
-// FileStorageService.java
 package org.example.backend.service;
 
 import lombok.RequiredArgsConstructor;
@@ -11,7 +10,6 @@ import org.example.backend.model.FileInfo;
 import org.example.backend.model.User;
 import org.example.backend.repository.FileInfoRepository;
 import org.example.backend.repository.UserRepository;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -44,6 +42,14 @@ public class FileStorageService {
     private static final List<String> VALID_CATEGORIES = Arrays.asList(
             "办公软件", "开发工具", "学习资料", "实用脚本", "运维工具", "系统工具"
     );
+
+    /**
+     * 检查分片是否存在
+     */
+    public boolean checkChunkExists(String fileKey, int chunkIndex) {
+        String chunkKey = getChunkKey(fileKey, chunkIndex);
+        return Files.exists(getChunkPath(fileKey, chunkIndex));
+    }
 
     /**
      * 获取当前登录用户
@@ -92,7 +98,7 @@ public class FileStorageService {
             // 检查是否已上传（根据MD5）
             if (dto.getMd5() != null) {
                 Optional<FileInfo> existingFile = fileRepository.findByMd5(dto.getMd5());
-                if (existingFile.isPresent()) {
+                if (existingFile.isPresent() && "completed".equals(existingFile.get().getUploadStatus())) {
                     return existingFile.get().getFileKey();
                 }
             }
@@ -147,7 +153,7 @@ public class FileStorageService {
             String fileKey = dto.getFileKey();
             int chunkIndex = dto.getChunkIndex();
 
-            // 检查文件记录是否存在且属于当前用户
+            // 检查文件记录是否存在
             FileInfo fileInfo = fileRepository.findByFileKey(fileKey)
                     .orElseThrow(() -> new RuntimeException("文件记录不存在"));
 
@@ -176,13 +182,6 @@ public class FileStorageService {
                 result.put("chunkIndex", chunkIndex);
                 result.put("allChunksUploaded", allChunksUploaded);
                 result.put("message", "分片上传成功");
-
-                if (allChunksUploaded) {
-                    // 自动合并分片
-                    mergeChunks(fileKey);
-                    result.put("merged", true);
-                    result.put("finalMessage", "所有分片已上传完成，正在合并文件...");
-                }
 
                 return result;
 
@@ -354,10 +353,6 @@ public class FileStorageService {
             throw new RuntimeException("文件不存在");
         }
 
-        // 更新下载次数（可以在FileInfo中添加downloadCount字段）
-        // fileInfo.setDownloadCount(fileInfo.getDownloadCount() + 1);
-        // fileRepository.save(fileInfo);
-
         return filePath;
     }
 
@@ -366,7 +361,6 @@ public class FileStorageService {
      */
     public List<FileInfoDTO> getMyUploads() {
         User currentUser = getCurrentUser();
-        validateAdminPermission();
 
         List<FileInfo> files = fileRepository.findByUploader(currentUser);
         return files.stream()
@@ -379,7 +373,6 @@ public class FileStorageService {
      */
     @Transactional
     public void deleteMyFile(String fileKey) {
-        validateAdminPermission();
         User currentUser = getCurrentUser();
 
         FileInfo fileInfo = fileRepository.findByFileKey(fileKey)
@@ -518,6 +511,10 @@ public class FileStorageService {
 
     private Path getChunkPath(String fileKey, int chunkIndex) {
         return config.getChunkTempPath().resolve(fileKey).resolve(chunkIndex + ".chunk");
+    }
+
+    private String getChunkKey(String fileKey, int chunkIndex) {
+        return fileKey + "_" + chunkIndex;
     }
 
     private Path getTargetFilePath(String category, String fileName, String fileKey) {

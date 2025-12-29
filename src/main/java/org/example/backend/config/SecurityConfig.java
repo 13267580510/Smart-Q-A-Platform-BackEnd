@@ -5,20 +5,18 @@ import org.example.backend.filter.JwtAuthenticationFilter;
 import org.example.backend.service.UserService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.password.NoOpPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
@@ -27,16 +25,17 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final UserService userService;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, UserService userService) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.userService = userService;
     }
 
-    private final UserService userService;
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -100,19 +99,27 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/api/questions",
-                                "/api/debug/**"
+                                "/api/debug/**",
+
+                                // 文件相关的公共接口
+                                "/api/files/categories",        // 获取分类（公开）
+                                "/api/files/list",              // 获取文件列表（公开）
+                                "/api/files/search",            // 搜索文件（公开）
+                                "/api/files/detail/**",         // 获取文件详情（公开）
+                                "/api/files/download/**"        // 下载文件（公开）
                         ).permitAll()
 
                         // 测试：先暂时开放chat路径
                         .requestMatchers("/api/chat/**").permitAll()  // 临时开放测试
 
-                        // ADMIN权限
+                        // ADMIN权限 - 文件上传管理
                         .requestMatchers(
                                 "/api/reports/{reportId}/ban",
                                 "/api/reports/{userId}/unban",
                                 "/api/reports/*",
                                 "/api/admin/questions/**",
-                                "/api/admin/answers/**"
+                                "/api/admin/answers/**",
+                                "/api/files/admin/**"           // ADMIN文件上传管理接口
                         ).hasRole("ADMIN")
 
                         // USER或ADMIN权限
@@ -124,6 +131,7 @@ public class SecurityConfig {
                                 "/api/chat/**"
                         ).hasAnyRole("USER", "ADMIN")
 
+                        // 默认需要认证（USER和ADMIN都可以访问的接口）
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
@@ -141,6 +149,7 @@ public class SecurityConfig {
 
         return http.build();
     }
+
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();

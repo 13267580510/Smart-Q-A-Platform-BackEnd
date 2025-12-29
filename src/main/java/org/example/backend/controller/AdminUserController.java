@@ -78,7 +78,7 @@ public class AdminUserController {
      */
     @PostMapping("/Administator")
     public ApiResponse createAdminUser(@RequestBody User user) {
-        user.setRole(UserRole.ADMIN);
+        user.setRole(User.UserRole.ADMIN);
         User createdUser = userService.register(user);
         UserDTO userDTO = UserDTO.fromUser(createdUser, questionRepository, answerRepository);
         return ApiResponse.success(201, "管理员用户创建成功", userDTO);

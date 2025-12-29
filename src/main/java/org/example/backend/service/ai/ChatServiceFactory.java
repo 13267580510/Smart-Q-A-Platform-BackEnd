@@ -1,15 +1,18 @@
 package org.example.backend.service.ai;
 
 import dev.langchain4j.memory.ChatMemory;
+import dev.langchain4j.memory.chat.ChatMemoryProvider;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.memory.chat.*;  // 这个应该是对的
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
-import dev.langchain4j.service.*;
-import org.example.backend.service.ai.memory.RedisChatMemoryStore;
+import dev.langchain4j.service.AiServices;
+import org.example.backend.service.ai.memory.HybridChatMemoryStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+
 @Configuration
 public class ChatServiceFactory {
 
@@ -22,10 +25,11 @@ public class ChatServiceFactory {
     @Autowired
     private StreamingChatModel streamingChatModel;
 
-    @Autowired  // 添加这个
-    private RedisChatMemoryStore redisChatMemoryStore;
+    @Autowired
+    private HybridChatMemoryStore hybridChatMemoryStore; // 使用新的混合存储
 
     @Bean
+    @Primary
     public ChatMemoryProvider chatMemoryProvider() {
         return new ChatMemoryProvider() {
             @Override
@@ -38,19 +42,20 @@ public class ChatServiceFactory {
                             java.util.UUID.randomUUID().toString().substring(0, 8);
                 }
 
-                System.out.println("ChatMemoryProvider: 为会话 " + id + " 创建 ChatMemory");
+                System.out.println("ChatMemoryProvider: 为会话 " + id + " 创建 ChatMemory，使用Hybrid存储");
 
-                // 使用你的 RedisChatMemoryStore
+                // 使用新的 HybridChatMemoryStore
                 return MessageWindowChatMemory.builder()
                         .id(id)
                         .maxMessages(20)  // 保留最近20条消息
-                        .chatMemoryStore(redisChatMemoryStore)  // 关键：使用Redis存储
+                        .chatMemoryStore(hybridChatMemoryStore)  // 关键：使用混合存储
                         .build();
             }
         };
     }
 
     @Bean
+    @Primary
     public ChatService chatService(ChatMemoryProvider chatMemoryProvider) {
         ChatService chatService = AiServices.builder(ChatService.class)
                 .chatModel(chatModel)
@@ -59,6 +64,8 @@ public class ChatServiceFactory {
                 .contentRetriever(contentRetriever)
                 .build();
 
+        System.out.println("ChatService已创建，使用HybridChatMemoryStore");
         return chatService;
     }
+
 }
