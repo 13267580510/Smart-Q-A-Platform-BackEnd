@@ -441,44 +441,7 @@ public class ChatSessionService {
         }
     }
 
-    /**
-     * 从缓存获取用户会话列表（修复版本）
-     */
-    private List<ChatSessionEntity> getCachedUserSessions(Long userId) {
-        String cacheKey = CacheKeyConfig.buildUserSessionsKey(String.valueOf(userId));
 
-        try {
-            String cachedData = redisTemplate.opsForValue().get(cacheKey);
-            if (cachedData == null) {
-                log.debug("缓存未命中: userId={}", userId);
-                return null;
-            }
-
-            return objectMapper.readValue(
-                    cachedData,
-                    objectMapper.getTypeFactory().constructCollectionType(
-                            List.class, ChatSessionEntity.class
-                    )
-            );
-
-        } catch (Exception e) {
-            log.error("从缓存获取用户会话失败: userId={}", userId, e);
-            // 出错时删除缓存，下次重新加载
-            try {
-                redisTemplate.delete(cacheKey);
-            } catch (Exception ex) {
-                // 忽略删除错误
-            }
-            return null;
-        }
-    }
-
-    /**
-     * 检查对象是否为FastJSON对象
-     */
-    private boolean isFastJsonObject(Object obj) {
-        return obj != null && obj.getClass().getName().contains("fastjson");
-    }
     /**
      * 清理会话缓存
      */
@@ -490,7 +453,6 @@ public class ChatSessionService {
             log.warn("清理会话缓存失败: sessionId={}", sessionId, e);
         }
     }
-
 
     /**
      * 诊断缓存问题

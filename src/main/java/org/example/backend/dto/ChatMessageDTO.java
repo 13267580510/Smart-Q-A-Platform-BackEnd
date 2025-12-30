@@ -19,5 +19,36 @@ public class ChatMessageDTO {
     private String role;
     private String content;
     private Map<String, Object> metadata;
+
+    public LocalDateTime getTimestamp() {
+        return timestamp;
+    }
+
+    public Map<String, Object> getMetadata() {
+        return metadata;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public Integer getIndex() {
+        return index;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
     private LocalDateTime timestamp;
+
+
 }

@@ -261,10 +261,6 @@ public class HybridChatMemoryStore implements ChatMemoryStore {
                         sessionId,
                         startIndex + i
                 );
-                if(entity.getRole()=="system"){
-                    System.out.println("entity:"+ entity);
-                    continue;
-                }
                 entities.add(entity);
             }
 

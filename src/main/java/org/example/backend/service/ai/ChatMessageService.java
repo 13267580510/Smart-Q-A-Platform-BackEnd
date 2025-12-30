@@ -253,48 +253,6 @@ public class ChatMessageService {
     }
 
     /**
-     * 删除指定索引之后的所有消息（用于撤回）
-     */
-    public int deleteMessagesFromIndex(String sessionId, int fromIndex, Long userId) {
-        if (sessionId == null || fromIndex < 0) {
-            return 0;
-        }
-
-        try {
-            // 验证会话所有权
-            if (userId != null) {
-                validateSessionOwnership(sessionId, userId);
-            }
-
-            // 获取要删除的消息数量
-            int totalCount = getMessageCount(sessionId);
-            int deleteCount = Math.max(0, totalCount - fromIndex);
-
-            if (deleteCount == 0) {
-                return 0;
-            }
-
-            // 从指定索引删除
-            chatMessageRepository.deleteMessagesFromIndex(sessionId, fromIndex);
-
-            // 重新加载剩余消息并更新缓存
-            List<ChatMessage> remainingMessages = getAllMessages(sessionId);
-            hybridChatMemoryStore.updateMessages(sessionId, remainingMessages);
-
-            log.info("删除指定索引之后的消息: sessionId={}, fromIndex={}, count={}",
-                    sessionId, fromIndex, deleteCount);
-
-            return deleteCount;
-
-        } catch (SecurityException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("删除指定索引消息失败: sessionId={}, fromIndex={}", sessionId, fromIndex, e);
-            throw new RuntimeException("删除消息失败", e);
-        }
-    }
-
-    /**
      * 导出会话消息（用于备份）
      */
     public Map<String, Object> exportSessionMessages(String sessionId, Long userId) {

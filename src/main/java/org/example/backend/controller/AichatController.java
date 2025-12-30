@@ -1,8 +1,7 @@
 package org.example.backend.controller;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
-import dev.langchain4j.data.message.ChatMessage;
-import jakarta.servlet.http.HttpServletResponse;
+import dev.langchain4j.data.message.ChatMessageType;
 import lombok.extern.slf4j.Slf4j;
 import org.example.backend.dto.BatchSaveMessagesRequest;
 import org.example.backend.dto.ChatMessageDTO;
@@ -326,16 +325,13 @@ public class AichatController {
         });
     }
 
-    /**
-     * 获取指定会话的所有对话记录（使用混合存储）
-     */
     @GetMapping("/session/{sessionId}/messages")
     public Mono<ResponseEntity<ApiResponse>> getSessionMessages(
             @PathVariable String sessionId,
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
 
         return Mono.fromCallable(() -> {
-            // 验证和提取用户ID
+            // 1. 验证和提取用户ID
             Long userId = extractUserId(authorizationHeader);
             if (userId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -344,35 +340,45 @@ public class AichatController {
 
             log.debug("获取会话消息: sessionId={}, userId={}", sessionId, userId);
 
-            // 获取会话信息用于权限验证
-            ChatSessionEntity session = chatSessionService.getSession(userId,sessionId);
+            // 2. 获取会话信息用于权限验证
+            ChatSessionEntity session = chatSessionService.getSession(userId, sessionId);
             if (session == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ApiResponse.error(404, "会话不存在或已过期"));
             }
 
-            // 检查权限
+            // 3. 检查权限
             if (!session.getUserId().equals(userId)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(ApiResponse.error(403, "无权访问此会话"));
             }
 
-            // 获取消息
-            List<ChatMessageDTO> messages = chatMessageService.getMessagesAsDTO(sessionId);
+            // 4. 获取原始消息列表（包含SYSTEM）
+            List<ChatMessageDTO> allMessages = chatMessageService.getMessagesAsDTO(sessionId);
 
-            // 构建响应数据
+            // 5. 核心修正：过滤SYSTEM类型消息（字符串匹配，兼容空值）
+            List<ChatMessageDTO> filteredMessages = allMessages.stream()
+                    // 空值判断 + 字符串匹配（匹配你Redis中的"SYSTEM"）
+                    .filter(dto -> dto.getType() != null && !"SYSTEM".equals(dto.getType()))
+                    // 可选：同时过滤role为system的消息（双重保险）
+                    // .filter(dto -> dto.getRole() == null || !"system".equals(dto.getRole().toLowerCase()))
+                    .collect(Collectors.toList());
+
+            // 6. 构建响应数据
             Map<String, Object> responseData = new HashMap<>();
             responseData.put("sessionId", sessionId);
             responseData.put("userId", userId);
             responseData.put("title", session.getTitle());
-            responseData.put("totalMessages", messages.size());
-            responseData.put("messages", messages);
+            responseData.put("totalMessages", allMessages.size()); // 原始总数（含SYSTEM）
+            responseData.put("displayMessagesCount", filteredMessages.size()); // 前端展示数量
+            responseData.put("messages", filteredMessages); // 过滤后给前端的消息
             responseData.put("sessionInfo", Map.of(
                     "createdAt", session.getCreatedAt(),
                     "lastAccessed", session.getLastAccessed(),
                     "messageCount", session.getMessageCount()
             ));
 
+            // 7. 返回响应
             return ResponseEntity.ok(
                     ApiResponse.success(200, "获取会话消息成功", responseData)
             );
@@ -387,6 +393,7 @@ public class AichatController {
                     .body(ApiResponse.error(500, "获取会话消息失败: " + e.getMessage())));
         });
     }
+
 
     /**
      * 批量保存消息（用于数据迁移或批量导入）
