@@ -325,6 +325,7 @@ public class AichatController {
         });
     }
 
+
     @GetMapping("/session/{sessionId}/messages")
     public Mono<ResponseEntity<ApiResponse>> getSessionMessages(
             @PathVariable String sessionId,
@@ -356,22 +357,63 @@ public class AichatController {
             // 4. 获取原始消息列表（包含SYSTEM）
             List<ChatMessageDTO> allMessages = chatMessageService.getMessagesAsDTO(sessionId);
 
-            // 5. 核心修正：过滤SYSTEM类型消息（字符串匹配，兼容空值）
-            List<ChatMessageDTO> filteredMessages = allMessages.stream()
-                    // 空值判断 + 字符串匹配（匹配你Redis中的"SYSTEM"）
-                    .filter(dto -> dto.getType() != null && !"SYSTEM".equals(dto.getType()))
-                    // 可选：同时过滤role为system的消息（双重保险）
-                    // .filter(dto -> dto.getRole() == null || !"system".equals(dto.getRole().toLowerCase()))
-                    .collect(Collectors.toList());
+            // 5. 最终精准过滤+内容截断
+            List<ChatMessageDTO> filteredMessages = new ArrayList<>();
+            for (ChatMessageDTO dto : allMessages) {
+                // 第一步：过滤SYSTEM类型消息
+                if (dto.getType() != null && "SYSTEM".equals(dto.getType())) {
+                    continue;
+                }
+
+                String content = dto.getContent();
+                if (content == null || content.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 第二步：核心截断逻辑——只保留RAG提示词之前的内容
+                String ragFlag = "Answer using the following information:";
+                String cleanContent;
+                if (content.contains(ragFlag)) {
+                    // 截断到RAG提示词之前，去除换行/空格后判断是否有效
+                    cleanContent = content.substring(0, content.indexOf(ragFlag)).trim();
+                    // 若截断后为空（纯检索内容），则过滤该消息
+                    if (cleanContent.isEmpty()) {
+                        continue;
+                    }
+                } else {
+                    // 无RAG提示词，保留原始内容（去除首尾空格）
+                    cleanContent = content.trim();
+                }
+
+                // 第三步：过滤纯检索特征的内容（兜底）
+                if (cleanContent.contains("NORMAL\" \"0\" \"0\" \"0\"")
+                        || cleanContent.contains("id\" \"title\" \"user_id\"")
+                        || cleanContent.equals("null")) {
+                    continue;
+                }
+
+                // 第四步：更新DTO的cleanContent，加入结果列表
+                ChatMessageDTO cleanDto = new ChatMessageDTO();
+                // 复制原DTO的所有字段（或用BeanUtils.copyProperties）
+                cleanDto.setSessionId(dto.getSessionId());
+                cleanDto.setIndex(dto.getIndex());
+                cleanDto.setType(dto.getType());
+                cleanDto.setRole(dto.getRole());
+                cleanDto.setContent(cleanContent);
+                cleanDto.setMetadata(dto.getMetadata());
+                cleanDto.setTimestamp(dto.getTimestamp());
+
+                filteredMessages.add(cleanDto);
+            }
 
             // 6. 构建响应数据
             Map<String, Object> responseData = new HashMap<>();
             responseData.put("sessionId", sessionId);
             responseData.put("userId", userId);
             responseData.put("title", session.getTitle());
-            responseData.put("totalMessages", allMessages.size()); // 原始总数（含SYSTEM）
-            responseData.put("displayMessagesCount", filteredMessages.size()); // 前端展示数量
-            responseData.put("messages", filteredMessages); // 过滤后给前端的消息
+            responseData.put("totalMessages", allMessages.size());
+            responseData.put("displayMessagesCount", filteredMessages.size());
+            responseData.put("messages", filteredMessages);
             responseData.put("sessionInfo", Map.of(
                     "createdAt", session.getCreatedAt(),
                     "lastAccessed", session.getLastAccessed(),
@@ -393,8 +435,36 @@ public class AichatController {
                     .body(ApiResponse.error(500, "获取会话消息失败: " + e.getMessage())));
         });
     }
-
-
+    /**
+     * 过滤RAG检索辅助内容的核心方法
+     * @param content 消息内容
+     * @return true=保留（非检索内容），false=过滤（是检索内容）
+     */
+    private boolean filterRagAuxiliaryContent(String content) {
+        if (content == null) {
+            return false;
+        }
+        // 核心过滤规则：
+        // 1. 过滤包含RAG检索标识的内容
+        if (content.contains("Answer using the following information:")) {
+            return false;
+        }
+        // 2. 过滤包含大量无意义标签/重复内容的检索列表（可根据实际情况扩展关键词）
+        String lowerContent = content.toLowerCase();
+        if (lowerContent.contains("normal")
+                && (lowerContent.contains("vue.js") || lowerContent.contains("react")
+                || lowerContent.contains("spring boot") || lowerContent.contains("docker")
+                || lowerContent.contains("kubernetes") || lowerContent.contains("linux"))
+                && content.contains("null")) {
+            return false;
+        }
+        // 3. 过滤纯数字/乱码/重复符号的无意义内容
+        if (content.matches("^[0-9\\s\"',:/]+$") || content.trim().equals("null")) {
+            return false;
+        }
+        // 保留其他有效内容
+        return true;
+    }
     /**
      * 批量保存消息（用于数据迁移或批量导入）
      */

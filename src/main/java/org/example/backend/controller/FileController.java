@@ -8,6 +8,7 @@ import org.example.backend.dto.ChunkUploadDTO;
 import org.example.backend.dto.FileInfoDTO;
 import org.example.backend.dto.FileUploadDTO;
 import org.example.backend.service.FileStorageService;
+import org.example.backend.utils.ApiResponse;
 import org.example.backend.utils.IpUtil;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -20,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.example.backend.model.ResponseStatus;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -44,13 +46,24 @@ public class FileController {
      * 公共接口：获取所有分类
      */
     @GetMapping("/categories")
-    public ResponseEntity<?> getCategories() {
+    public ResponseEntity<ApiResponse> getCategories() {
         try {
             List<String> categories = fileStorageService.getCategories();
-            return ResponseEntity.ok(successResponse("获取成功", categories));
+            return ResponseEntity.ok(
+                    ApiResponse.success(
+                            ResponseStatus.SUCCESS.getCode(),
+                            ResponseStatus.SUCCESS.getMessage(),
+                            categories
+                    )
+                    );
         } catch (Exception e) {
             log.error("获取分类失败", e);
-            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error(
+                            ResponseStatus.BAD_REQUEST.getCode(),
+                            e.getMessage()
+                    )
+            );
         }
     }
 
@@ -98,21 +111,6 @@ public class FileController {
             return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
         }
     }
-
-    /**
-     * 公共接口：获取文件详情
-     */
-    @GetMapping("/detail/{fileKey}")
-    public ResponseEntity<?> getFileDetail(@PathVariable String fileKey) {
-        try {
-            FileInfoDTO fileInfo = fileStorageService.getFileDetail(fileKey);
-            return ResponseEntity.ok(successResponse("获取成功", fileInfo));
-        } catch (Exception e) {
-            log.error("获取文件详情失败", e);
-            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
-        }
-    }
-
     /**
      * 公共接口：下载文件（USER和ADMIN都可以下载）
      */

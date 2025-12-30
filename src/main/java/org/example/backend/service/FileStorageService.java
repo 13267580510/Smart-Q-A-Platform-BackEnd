@@ -7,8 +7,10 @@ import org.example.backend.dto.ChunkUploadDTO;
 import org.example.backend.dto.FileInfoDTO;
 import org.example.backend.dto.FileUploadDTO;
 import org.example.backend.model.FileInfo;
+import org.example.backend.model.ResourceCategory; // 新增：资源分类实体类
 import org.example.backend.model.User;
 import org.example.backend.repository.FileInfoRepository;
+import org.example.backend.repository.ResourceCategoryRepository; // 新增：资源分类Repository
 import org.example.backend.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
@@ -37,11 +39,37 @@ public class FileStorageService {
     private final UserRepository userRepository;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
+    // 新增：注入分类Repository
+    private final ResourceCategoryRepository categoryRepository;
 
-    // 支持的分类
-    private static final List<String> VALID_CATEGORIES = Arrays.asList(
-            "办公软件", "开发工具", "学习资料", "实用脚本", "运维工具", "系统工具"
-    );
+    /**
+     * 从数据库查询所有分类（按创建时间降序）
+     * @return 分类名称列表
+     */
+    public List<String> getValidCategories() {
+        return categoryRepository.findAllByOrderByCreateTimeDesc()
+                .stream()
+                .map(ResourceCategory::getCategoryName)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 验证分类是否有效（根据数据库中是否存在该分类名称）
+     * @param category 分类名称
+     * @return 有效返回true，无效抛出异常
+     */
+    private boolean validateCategory(String category) {
+        if (category == null || category.trim().isEmpty()) {
+            throw new IllegalArgumentException("分类名称不能为空");
+        }
+        boolean exists = categoryRepository.existsByCategoryName(category);
+        if (!exists) {
+            throw new IllegalArgumentException("无效的文件分类：" + category);
+        }
+        return true;
+    }
+
+
 
     /**
      * 检查分片是否存在
@@ -85,10 +113,8 @@ public class FileStorageService {
         validateAdminPermission();
 
         try {
-            // 验证分类
-            if (!VALID_CATEGORIES.contains(dto.getCategory())) {
-                throw new IllegalArgumentException("无效的文件分类");
-            }
+            // 优化：使用数据库动态校验分类
+            validateCategory(dto.getCategory());
 
             // 检查文件大小
             if (dto.getTotalSize() > config.getMaxFileSize()) {
@@ -121,6 +147,8 @@ public class FileStorageService {
             fileInfo.setUploader(currentUser);
             fileInfo.setUploadIp(clientIp);
             fileInfo.setChunkStatus("{}");
+            fileInfo.setCreateTime(LocalDateTime.now());
+            fileInfo.setUpdateTime(LocalDateTime.now());
 
             fileRepository.save(fileInfo);
 
@@ -145,10 +173,8 @@ public class FileStorageService {
         validateAdminPermission();
 
         try {
-            // 验证分类
-            if (!VALID_CATEGORIES.contains(dto.getCategory())) {
-                throw new IllegalArgumentException("无效的文件分类");
-            }
+            // 优化：使用数据库动态校验分类
+            validateCategory(dto.getCategory());
 
             String fileKey = dto.getFileKey();
             int chunkIndex = dto.getChunkIndex();
@@ -223,7 +249,7 @@ public class FileStorageService {
                 }
             }
 
-            // 创建目标文件路径
+            // 创建目标文件路径（基于分类动态创建目录）
             String category = fileInfo.getCategory();
             String fileName = fileInfo.getFileName();
             Path targetPath = getTargetFilePath(category, fileName, fileKey);
@@ -276,10 +302,9 @@ public class FileStorageService {
     public List<FileInfoDTO> getFileList(String category, Pageable pageable) {
         List<FileInfo> files;
 
-        if (category != null && !category.isEmpty()) {
-            if (!VALID_CATEGORIES.contains(category)) {
-                throw new IllegalArgumentException("无效的分类");
-            }
+        if (category != null && !category.trim().isEmpty()) {
+            // 优化：校验分类有效性
+            validateCategory(category);
             files = fileRepository.findByCategoryAndUploadStatusOrderByCreateTimeDesc(category, "completed");
         } else {
             files = fileRepository.findByUploadStatusOrderByCreateTimeDesc("completed");
@@ -301,10 +326,9 @@ public class FileStorageService {
     public Page<FileInfoDTO> getFilePage(String category, Pageable pageable) {
         Page<FileInfo> filePage;
 
-        if (category != null && !category.isEmpty()) {
-            if (!VALID_CATEGORIES.contains(category)) {
-                throw new IllegalArgumentException("无效的分类");
-            }
+        if (category != null && !category.trim().isEmpty()) {
+            // 优化：校验分类有效性
+            validateCategory(category);
             filePage = fileRepository.findByCategoryAndUploadStatus(category, "completed", pageable);
         } else {
             filePage = fileRepository.findByUploadStatus("completed", pageable);
@@ -404,9 +428,10 @@ public class FileStorageService {
 
     /**
      * 获取所有分类（USER和ADMIN都可以访问）
+     * 兼容原有接口，返回分类名称列表
      */
     public List<String> getCategories() {
-        return VALID_CATEGORIES;
+        return getValidCategories();
     }
 
     /**
@@ -432,9 +457,10 @@ public class FileStorageService {
         stats.put("totalSize", totalSize);
         stats.put("totalSizeFormatted", formatFileSize(totalSize));
 
-        // 按分类统计
+        // 按分类统计（优化：从数据库查询所有有效分类）
         Map<String, Map<String, Object>> categoryStats = new HashMap<>();
-        for (String category : VALID_CATEGORIES) {
+        List<String> validCategories = getValidCategories();
+        for (String category : validCategories) {
             List<FileInfo> categoryFiles = fileRepository.findByCategoryAndUploadStatus(category, "completed");
             long categorySize = categoryFiles.stream()
                     .mapToLong(FileInfo::getFileSize)
@@ -489,8 +515,8 @@ public class FileStorageService {
         dto.setCategory(fileInfo.getCategory());
         dto.setFileSize(fileInfo.getFileSize());
         dto.setUploadStatus(fileInfo.getUploadStatus());
-        dto.setUserId(fileInfo.getUserId());
-        dto.setUsername(fileInfo.getUsername());
+        dto.setUserId(fileInfo.getUploader().getId());
+        dto.setUsername(fileInfo.getUploader().getUsername());
         dto.setCreateTime(fileInfo.getCreateTime());
         return dto;
     }
@@ -518,6 +544,7 @@ public class FileStorageService {
     }
 
     private Path getTargetFilePath(String category, String fileName, String fileKey) {
+        // 优化：文件名过滤特殊字符，避免路径异常
         String safeFileName = fileKey + "_" + fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
         return config.getRootPath().resolve(category).resolve(safeFileName);
     }
@@ -528,7 +555,7 @@ public class FileStorageService {
 
     private String getFileType(String fileName) {
         int dotIndex = fileName.lastIndexOf('.');
-        return dotIndex > 0 ? fileName.substring(dotIndex + 1) : "";
+        return dotIndex > 0 ? fileName.substring(dotIndex + 1) : "unknown";
     }
 
     private String calculateFileMd5(Path filePath) throws IOException {
@@ -553,6 +580,8 @@ public class FileStorageService {
         if (status != null) {
             status.put(String.valueOf(chunkIndex), true);
             redisTemplate.opsForValue().set(redisKey, status, 24, TimeUnit.HOURS);
+        } else {
+            throw new RuntimeException("分片状态初始化失败");
         }
     }
 
@@ -586,7 +615,7 @@ public class FileStorageService {
         if (count == 1) {
             redisTemplate.expire(lockKey, 10, TimeUnit.MINUTES);
         }
-        return count <= config.getMaxConcurrent();
+        return count != null && count <= config.getMaxConcurrent();
     }
 
     private void releaseUploadLock(String fileKey) {
