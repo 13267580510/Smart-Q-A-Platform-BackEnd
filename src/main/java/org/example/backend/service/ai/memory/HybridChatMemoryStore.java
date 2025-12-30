@@ -249,25 +249,36 @@ public class HybridChatMemoryStore implements ChatMemoryStore {
         }
 
         try {
-            // 获取当前最大消息索引
-            Integer maxIndex = chatMessageRepository.findMaxMessageIndexBySessionId(sessionId);
-            int startIndex = (maxIndex != null) ? maxIndex + 1 : 0;
+            // 1. 获取数据库中现有的所有消息
+            List<ChatMessageEntity> existingEntities = chatMessageRepository
+                    .findBySessionIdOrderByMessageIndexAsc(sessionId);
 
-            // 准备实体列表
+            // 2. 计算需要保存的新消息
+            List<ChatMessage> newMessages = findNewMessages(existingEntities, messages);
+
+            if (newMessages.isEmpty()) {
+                log.debug("没有新消息需要保存: sessionId={}", sessionId);
+                return;
+            }
+
+            // 3. 计算起始索引
+            int startIndex = existingEntities.isEmpty() ? 0 :
+                    existingEntities.get(existingEntities.size() - 1).getMessageIndex() + 1;
+
+            // 4. 保存新消息
             List<ChatMessageEntity> entities = new ArrayList<>();
-            for (int i = 0; i < messages.size(); i++) {
+            for (int i = 0; i < newMessages.size(); i++) {
                 ChatMessageEntity entity = messageConverter.toEntity(
-                        messages.get(i),
+                        newMessages.get(i),
                         sessionId,
                         startIndex + i
                 );
                 entities.add(entity);
             }
 
-            // 批量保存
             if (!entities.isEmpty()) {
                 chatMessageRepository.saveAll(entities);
-                log.debug("保存到数据库成功: sessionId={}, count={}", sessionId, entities.size());
+                log.debug("增量保存到数据库成功: sessionId={}, count={}", sessionId, entities.size());
             }
 
         } catch (Exception e) {
@@ -276,6 +287,36 @@ public class HybridChatMemoryStore implements ChatMemoryStore {
         }
     }
 
+    /**
+     * 找出需要保存的新消息
+     */
+    private List<ChatMessage> findNewMessages(List<ChatMessageEntity> existingEntities,
+                                              List<ChatMessage> allMessages) {
+        if (existingEntities.isEmpty()) {
+            return allMessages;
+        }
+
+        // 获取最后一条已保存消息的内容，用于比较
+        String lastSavedContent = existingEntities.get(existingEntities.size() - 1).getContent();
+
+        // 找到已保存消息在allMessages中的位置
+        int lastSavedIndex = -1;
+        for (int i = 0; i < allMessages.size(); i++) {
+            ChatMessage message = allMessages.get(i);
+            String content = messageConverter.extractContent(message);
+            if (content != null && content.equals(lastSavedContent)) {
+                lastSavedIndex = i;
+                break;
+            }
+        }
+
+        // 返回lastSavedIndex之后的消息（新增的部分）
+        if (lastSavedIndex >= 0 && lastSavedIndex < allMessages.size() - 1) {
+            return allMessages.subList(lastSavedIndex + 1, allMessages.size());
+        }
+
+        return Collections.emptyList();
+    }
     /**
      * 转换为Redis缓存格式
      */
