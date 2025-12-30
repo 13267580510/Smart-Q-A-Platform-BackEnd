@@ -7,16 +7,14 @@ import java.time.LocalDateTime;
 @Data
 public class FileInfoDTO {
     private Long id;
-    private String fileName;
-    private String fileKey;
-    private String filePath;
-    private String fileType;
-    private String category;
-    private Long fileSize;
-    private String uploadStatus;
-    private Long userId;
-    private String username;
-    private LocalDateTime createTime;
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
 
     public String getFileName() {
         return fileName;
@@ -26,28 +24,12 @@ public class FileInfoDTO {
         this.fileName = fileName;
     }
 
-    public String getFileKey() {
-        return fileKey;
-    }
-
-    public void setFileKey(String fileKey) {
-        this.fileKey = fileKey;
-    }
-
     public String getFilePath() {
         return filePath;
     }
 
     public void setFilePath(String filePath) {
         this.filePath = filePath;
-    }
-
-    public String getFileType() {
-        return fileType;
-    }
-
-    public void setFileType(String fileType) {
-        this.fileType = fileType;
     }
 
     public String getCategory() {
@@ -66,28 +48,12 @@ public class FileInfoDTO {
         this.fileSize = fileSize;
     }
 
-    public String getUploadStatus() {
-        return uploadStatus;
-    }
-
-    public void setUploadStatus(String uploadStatus) {
-        this.uploadStatus = uploadStatus;
-    }
-
     public Long getUserId() {
         return userId;
     }
 
     public void setUserId(Long userId) {
         this.userId = userId;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
     }
 
     public LocalDateTime getCreateTime() {
@@ -98,8 +64,10 @@ public class FileInfoDTO {
         this.createTime = createTime;
     }
 
-    public Long getId() {
-        return id;
-    }
-
+    private String fileName;
+    private String filePath;
+    private String category;
+    private Long fileSize;
+    private Long userId;
+    private LocalDateTime createTime;
 }

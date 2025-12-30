@@ -71,7 +71,7 @@ public class FileController {
      * 公共接口：获取文件列表（可分页、可按分类筛选）
      */
     @GetMapping("/list")
-    public ResponseEntity<?> getFileList(
+    public ResponseEntity<ApiResponse> getFileList(
             @RequestParam(value = "category", required = false) String category,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "20") int size,
@@ -79,6 +79,12 @@ public class FileController {
             @RequestParam(value = "order", defaultValue = "desc") String order) {
 
         try {
+            System.out.println("接收到获取文件列表的请求");
+            System.out.println("req.category: " + category);
+            System.out.println("req.page: " + page);
+            System.out.println("req.size: " + size);
+            System.out.println("req.sort: " + sort);
+            System.out.println("req.order: " + order);
             Sort.Direction direction = "desc".equalsIgnoreCase(order) ? Sort.Direction.DESC : Sort.Direction.ASC;
             Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sort));
 
@@ -91,10 +97,19 @@ public class FileController {
             response.put("pageNumber", filePage.getNumber());
             response.put("pageSize", filePage.getSize());
 
-            return ResponseEntity.ok(successResponse("获取成功", response));
+            return ResponseEntity.ok(
+                    ApiResponse.success(
+                            ResponseStatus.SUCCESS.getCode(),
+                            ResponseStatus.SUCCESS.getMessage(),
+                            response
+                    )
+            );
         } catch (Exception e) {
             log.error("获取文件列表失败", e);
-            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
+            return ResponseEntity.badRequest().body(ApiResponse.error(
+                    ResponseStatus.BAD_REQUEST.getCode(),
+                    e.getMessage()
+            ));
         }
     }
 
@@ -115,10 +130,10 @@ public class FileController {
      * 公共接口：下载文件（USER和ADMIN都可以下载）
      */
     @GetMapping("/download/{fileKey}")
-    public void downloadFile(@PathVariable String fileKey, HttpServletResponse response) {
+    public void downloadFile(@PathVariable Long fileId, HttpServletResponse response) {
         try {
-            Path filePath = fileStorageService.downloadFile(fileKey);
-            FileInfoDTO fileInfo = fileStorageService.getFileDetail(fileKey);
+            Path filePath = fileStorageService.downloadFile(fileId);
+            FileInfoDTO fileInfo = fileStorageService.getFileDetail(fileId);
 
             // 设置响应头
             String encodedFileName = URLEncoder.encode(fileInfo.getFileName(), StandardCharsets.UTF_8.toString())
@@ -164,13 +179,13 @@ public class FileController {
     @GetMapping("/admin/check-chunk")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> checkChunkExists(
-            @RequestParam("fileKey") String fileKey,
+            @RequestParam("fileId") Long fileId,
             @RequestParam("chunkIndex") Integer chunkIndex) {
         try {
-            boolean exists = fileStorageService.checkChunkExists(fileKey, chunkIndex);
+            boolean exists = fileStorageService.checkChunkExists(fileId, chunkIndex);
             Map<String, Object> result = new HashMap<>();
             result.put("exists", exists);
-            result.put("fileKey", fileKey);
+            result.put("fileId", fileId);
             result.put("chunkIndex", chunkIndex);
             return ResponseEntity.ok(successResponse("检查成功", result));
         } catch (Exception e) {
@@ -203,96 +218,96 @@ public class FileController {
     /**
      * ADMIN接口：上传分片
      */
-    @PostMapping("/admin/upload-chunk")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> uploadChunk(
-            @RequestParam("fileKey") String fileKey,
-            @RequestParam("fileName") String fileName,
-            @RequestParam("category") String category,
-            @RequestParam("chunkIndex") Integer chunkIndex,
-            @RequestParam("chunkCount") Integer chunkCount,
-            @RequestParam(value = "md5", required = false) String md5,
-            @RequestParam("chunk") MultipartFile chunk) {
-
-        try {
-            String clientIp = IpUtil.getClientIp(request);
-
-            ChunkUploadDTO dto = new ChunkUploadDTO();
-            dto.setFileKey(fileKey);
-            dto.setFileName(fileName);
-            dto.setCategory(category);
-            dto.setChunkIndex(chunkIndex);
-            dto.setChunkCount(chunkCount);
-            dto.setMd5(md5);
-            dto.setChunk(chunk);
-
-            Map<String, Object> result = fileStorageService.uploadChunk(dto, clientIp);
-            return ResponseEntity.ok(successResponse("分片上传成功", result));
-        } catch (Exception e) {
-            log.error("上传分片失败", e);
-            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
-        }
-    }
+//    @PostMapping("/admin/upload-chunk")
+//    @PreAuthorize("hasRole('ADMIN')")
+//    public ResponseEntity<?> uploadChunk(
+//            @RequestParam("fileKey") String fileKey,
+//            @RequestParam("fileName") String fileName,
+//            @RequestParam("category") String category,
+//            @RequestParam("chunkIndex") Integer chunkIndex,
+//            @RequestParam("chunkCount") Integer chunkCount,
+//            @RequestParam(value = "md5", required = false) String md5,
+//            @RequestParam("chunk") MultipartFile chunk) {
+//
+//        try {
+//            String clientIp = IpUtil.getClientIp(request);
+//
+//            ChunkUploadDTO dto = new ChunkUploadDTO();
+//            dto.setFileKey(fileKey);
+//            dto.setFileName(fileName);
+//            dto.setCategory(category);
+//            dto.setChunkIndex(chunkIndex);
+//            dto.setChunkCount(chunkCount);
+//            dto.setMd5(md5);
+//            dto.setChunk(chunk);
+//
+//            Map<String, Object> result = fileStorageService.uploadChunk(dto, clientIp);
+//            return ResponseEntity.ok(successResponse("分片上传成功", result));
+//        } catch (Exception e) {
+//            log.error("上传分片失败", e);
+//            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
+//        }
+//    }
 
     /**
      * ADMIN接口：合并分片
      */
-    @PostMapping("/admin/merge-chunks")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> mergeChunks(@RequestParam("fileKey") String fileKey) {
-        try {
-            Map<String, Object> result = fileStorageService.mergeChunks(fileKey);
-            return ResponseEntity.ok(successResponse("合并成功", result));
-        } catch (Exception e) {
-            log.error("合并分片失败", e);
-            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
-        }
-    }
+//    @PostMapping("/admin/merge-chunks")
+//    @PreAuthorize("hasRole('ADMIN')")
+//    public ResponseEntity<?> mergeChunks(@RequestParam("fileKey") String fileKey) {
+//        try {
+//            Map<String, Object> result = fileStorageService.mergeChunks(fileKey);
+//            return ResponseEntity.ok(successResponse("合并成功", result));
+//        } catch (Exception e) {
+//            log.error("合并分片失败", e);
+//            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
+//        }
+//    }
 
     /**
      * ADMIN接口：获取我的上传记录
      */
-    @GetMapping("/admin/my-uploads")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> getMyUploads() {
-        try {
-            List<FileInfoDTO> files = fileStorageService.getMyUploads();
-            return ResponseEntity.ok(successResponse("获取成功", files));
-        } catch (Exception e) {
-            log.error("获取上传记录失败", e);
-            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
-        }
-    }
+//    @GetMapping("/admin/my-uploads")
+//    @PreAuthorize("hasRole('ADMIN')")
+//    public ResponseEntity<?> getMyUploads() {
+//        try {
+//            List<FileInfoDTO> files = fileStorageService.getMyUploads();
+//            return ResponseEntity.ok(successResponse("获取成功", files));
+//        } catch (Exception e) {
+//            log.error("获取上传记录失败", e);
+//            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
+//        }
+//    }
 
     /**
      * ADMIN接口：删除我的文件
      */
-    @DeleteMapping("/admin/delete/{fileKey}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> deleteMyFile(@PathVariable String fileKey) {
-        try {
-            fileStorageService.deleteMyFile(fileKey);
-            return ResponseEntity.ok(successResponse("删除成功", null));
-        } catch (Exception e) {
-            log.error("删除文件失败", e);
-            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
-        }
-    }
+//    @DeleteMapping("/admin/delete/{fileKey}")
+//    @PreAuthorize("hasRole('ADMIN')")
+//    public ResponseEntity<?> deleteMyFile(@PathVariable String fileKey) {
+//        try {
+//            fileStorageService.deleteMyFile(fileKey);
+//            return ResponseEntity.ok(successResponse("删除成功", null));
+//        } catch (Exception e) {
+//            log.error("删除文件失败", e);
+//            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
+//        }
+//    }
 
     /**
      * ADMIN接口：获取文件统计
      */
-    @GetMapping("/admin/stats")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> getFileStats() {
-        try {
-            Map<String, Object> stats = fileStorageService.getFileStats();
-            return ResponseEntity.ok(successResponse("获取成功", stats));
-        } catch (Exception e) {
-            log.error("获取统计信息失败", e);
-            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
-        }
-    }
+//    @GetMapping("/admin/stats")
+//    @PreAuthorize("hasRole('ADMIN')")
+//    public ResponseEntity<?> getFileStats() {
+//        try {
+//            Map<String, Object> stats = fileStorageService.getFileStats();
+//            return ResponseEntity.ok(successResponse("获取成功", stats));
+//        } catch (Exception e) {
+//            log.error("获取统计信息失败", e);
+//            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
+//        }
+//    }
 
     // 统一响应格式
     private Map<String, Object> successResponse(String message, Object data) {

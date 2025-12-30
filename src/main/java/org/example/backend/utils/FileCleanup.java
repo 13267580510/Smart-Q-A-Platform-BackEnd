@@ -20,32 +20,7 @@ import java.util.List;
 public class FileCleanup {
     private final FileInfoRepository fileRepository;
 
-    /**
-     * 每天凌晨2点清理过期上传记录和分片文件
-     */
-    @Scheduled(cron = "0 0 2 * * ?")
-    @Transactional
-    public void cleanupExpiredUploads() {
-        try {
-            LocalDateTime expireTime = LocalDateTime.now().minusHours(24);
 
-            // 清理过期的上传记录
-            List<FileInfo> expiredFiles = fileRepository.findByUploadStatus("uploading");
-            for (FileInfo file : expiredFiles) {
-                if (file.getCreateTime().isBefore(expireTime)) {
-                    // 清理分片文件
-                    cleanupChunkFiles(file.getFileKey());
-                    // 删除数据库记录
-                    fileRepository.delete(file);
-                    log.info("清理过期上传记录: {}", file.getFileKey());
-                }
-            }
-
-            log.info("文件清理任务完成");
-        } catch (Exception e) {
-            log.error("文件清理任务失败", e);
-        }
-    }
 
     private void cleanupChunkFiles(String fileKey) {
         try {

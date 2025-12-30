@@ -74,43 +74,19 @@ public class FileStorageService {
     /**
      * 检查分片是否存在
      */
-    public boolean checkChunkExists(String fileKey, int chunkIndex) {
-        String chunkKey = getChunkKey(fileKey, chunkIndex);
-        return Files.exists(getChunkPath(fileKey, chunkIndex));
+    public boolean checkChunkExists(Long fileId, int chunkIndex) {
+        String chunkKey = getChunkKey(fileId, chunkIndex);
+        return Files.exists(getChunkPath(fileId, chunkIndex));
     }
 
-    /**
-     * 获取当前登录用户
-     */
-    public User getCurrentUser() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
-    }
 
-    /**
-     * 检查当前用户是否为ADMIN
-     */
-    public boolean isCurrentUserAdmin() {
-        User user = getCurrentUser();
-        return user.getRole() == User.UserRole.ADMIN;
-    }
 
-    /**
-     * 验证ADMIN权限
-     */
-    private void validateAdminPermission() {
-        if (!isCurrentUserAdmin()) {
-            throw new AccessDeniedException("需要管理员权限");
-        }
-    }
 
     /**
      * 初始化上传（只有ADMIN可以调用）
      */
     @Transactional
     public String initUpload(FileUploadDTO dto, String clientIp) {
-        validateAdminPermission();
 
         try {
             // 优化：使用数据库动态校验分类
@@ -121,37 +97,19 @@ public class FileStorageService {
                 throw new IllegalArgumentException("文件大小超过限制");
             }
 
-            // 检查是否已上传（根据MD5）
-            if (dto.getMd5() != null) {
-                Optional<FileInfo> existingFile = fileRepository.findByMd5(dto.getMd5());
-                if (existingFile.isPresent() && "completed".equals(existingFile.get().getUploadStatus())) {
-                    return existingFile.get().getFileKey();
-                }
-            }
-
-            // 获取当前用户
-            User currentUser = getCurrentUser();
-
             // 创建文件记录
             String fileKey = generateFileKey();
             FileInfo fileInfo = new FileInfo();
             fileInfo.setFileName(dto.getFileName());
-            fileInfo.setFileKey(fileKey);
             fileInfo.setCategory(dto.getCategory());
-            fileInfo.setFileType(getFileType(dto.getFileName()));
             fileInfo.setChunkCount(dto.getChunkCount());
             fileInfo.setChunkSize(dto.getChunkSize().intValue());
             fileInfo.setFileSize(dto.getTotalSize());
             fileInfo.setMd5(dto.getMd5());
-            fileInfo.setUploadStatus("uploading");
-            fileInfo.setUploader(currentUser);
+            //fileInfo.setUploader(currentUser);
             fileInfo.setUploadIp(clientIp);
-            fileInfo.setChunkStatus("{}");
             fileInfo.setCreateTime(LocalDateTime.now());
-            fileInfo.setUpdateTime(LocalDateTime.now());
-
             fileRepository.save(fileInfo);
-
             // 初始化分片状态
             if (dto.getChunkCount() > 1) {
                 initChunkStatus(fileKey, dto.getChunkCount());
@@ -168,78 +126,79 @@ public class FileStorageService {
     /**
      * 上传分片（只有ADMIN可以调用）
      */
-    @Transactional
-    public Map<String, Object> uploadChunk(ChunkUploadDTO dto, String clientIp) {
-        validateAdminPermission();
-
-        try {
-            // 优化：使用数据库动态校验分类
-            validateCategory(dto.getCategory());
-
-            String fileKey = dto.getFileKey();
-            int chunkIndex = dto.getChunkIndex();
-
-            // 检查文件记录是否存在
-            FileInfo fileInfo = fileRepository.findByFileKey(fileKey)
-                    .orElseThrow(() -> new RuntimeException("文件记录不存在"));
-
-            User currentUser = getCurrentUser();
-            if (!fileInfo.getUploader().getId().equals(currentUser.getId())) {
-                throw new AccessDeniedException("无权操作此文件");
-            }
-
-            // 检查并发控制
-            if (!acquireUploadLock(fileKey)) {
-                throw new RuntimeException("上传并发数已达上限");
-            }
-
-            try {
-                // 保存分片文件
-                saveChunkFile(dto.getChunk(), fileKey, chunkIndex);
-
-                // 更新分片状态
-                updateChunkStatus(fileKey, chunkIndex);
-
-                // 检查是否所有分片都已完成
-                boolean allChunksUploaded = checkAllChunksUploaded(fileKey, dto.getChunkCount());
-
-                Map<String, Object> result = new HashMap<>();
-                result.put("success", true);
-                result.put("chunkIndex", chunkIndex);
-                result.put("allChunksUploaded", allChunksUploaded);
-                result.put("message", "分片上传成功");
-
-                return result;
-
-            } finally {
-                releaseUploadLock(fileKey);
-            }
-
-        } catch (Exception e) {
-            log.error("分片上传失败", e);
-            throw new RuntimeException("分片上传失败: " + e.getMessage());
-        }
-    }
+//    @Transactional
+//    public Map<String, Object> uploadChunk(ChunkUploadDTO dto, String clientIp) {
+//        //验证权限
+//        //        validateAdminPermission();
+//
+//        try {
+//            // 优化：使用数据库动态校验分类
+//            validateCategory(dto.getCategory());
+//
+//            String fileKey = dto.getFileKey();
+//            int chunkIndex = dto.getChunkIndex();
+//
+//            // 检查文件记录是否存在
+//            FileInfo fileInfo = fileRepository.findByFileKey(fileKey)
+//                    .orElseThrow(() -> new RuntimeException("文件记录不存在"));
+//
+//           // User currentUser = getCurrentUser();
+////            if (!fileInfo.getUploader().getId().equals(currentUser.getId())) {
+////                throw new AccessDeniedException("无权操作此文件");
+////            }
+//
+//            // 检查并发控制
+//            if (!acquireUploadLock(fileKey)) {
+//                throw new RuntimeException("上传并发数已达上限");
+//            }
+//
+//            try {
+//                // 保存分片文件
+//                saveChunkFile(dto.getChunk(), fileKey, chunkIndex);
+//
+//                // 更新分片状态
+//                updateChunkStatus(fileKey, chunkIndex);
+//
+//                // 检查是否所有分片都已完成
+//                boolean allChunksUploaded = checkAllChunksUploaded(fileKey, dto.getChunkCount());
+//
+//                Map<String, Object> result = new HashMap<>();
+//                result.put("success", true);
+//                result.put("chunkIndex", chunkIndex);
+//                result.put("allChunksUploaded", allChunksUploaded);
+//                result.put("message", "分片上传成功");
+//
+//                return result;
+//
+//            } finally {
+//                releaseUploadLock(fileKey);
+//            }
+//
+//        } catch (Exception e) {
+//            log.error("分片上传失败", e);
+//            throw new RuntimeException("分片上传失败: " + e.getMessage());
+//        }
+//    }
 
     /**
      * 合并分片（只有ADMIN可以调用）
      */
     @Transactional
-    public Map<String, Object> mergeChunks(String fileKey) {
-        validateAdminPermission();
+    public Map<String, Object> mergeChunks(Long fileId) {
+       // validateAdminPermission();
 
         try {
-            FileInfo fileInfo = fileRepository.findByFileKey(fileKey)
+            FileInfo fileInfo = fileRepository.findById(fileId)
                     .orElseThrow(() -> new RuntimeException("文件记录不存在"));
 
             // 验证文件所有权
-            User currentUser = getCurrentUser();
-            if (!fileInfo.getUploader().getId().equals(currentUser.getId())) {
-                throw new AccessDeniedException("无权操作此文件");
-            }
+            //User currentUser = getCurrentUser();
+//            if (!fileInfo.getUploader().getId().equals(currentUser.getId())) {
+//                throw new AccessDeniedException("无权操作此文件");
+//            }
 
             // 获取分片状态
-            Map<Integer, Boolean> chunkStatus = getChunkStatus(fileKey);
+            Map<Integer, Boolean> chunkStatus = getChunkStatus(fileId);
             int totalChunks = fileInfo.getChunkCount();
 
             // 验证所有分片是否已上传
@@ -252,13 +211,13 @@ public class FileStorageService {
             // 创建目标文件路径（基于分类动态创建目录）
             String category = fileInfo.getCategory();
             String fileName = fileInfo.getFileName();
-            Path targetPath = getTargetFilePath(category, fileName, fileKey);
+            Path targetPath = getTargetFilePath(category, fileName, fileId);
             Files.createDirectories(targetPath.getParent());
 
             // 合并分片
             try (OutputStream outputStream = Files.newOutputStream(targetPath)) {
                 for (int i = 0; i < totalChunks; i++) {
-                    Path chunkPath = getChunkPath(fileKey, i);
+                    Path chunkPath = getChunkPath(fileId, i);
                     Files.copy(chunkPath, outputStream);
 
                     // 删除已合并的分片
@@ -273,16 +232,14 @@ public class FileStorageService {
             fileInfo.setFilePath(targetPath.toString());
             fileInfo.setFileSize(Files.size(targetPath));
             fileInfo.setMd5(fileMd5);
-            fileInfo.setUploadStatus("completed");
-            fileInfo.setUpdateTime(LocalDateTime.now());
             fileRepository.save(fileInfo);
 
             // 清理Redis中的分片状态
-            cleanUpChunkStatus(fileKey);
+            cleanUpChunkStatus(fileId);
 
             Map<String, Object> result = new HashMap<>();
             result.put("success", true);
-            result.put("fileKey", fileKey);
+
             result.put("fileName", fileName);
             result.put("filePath", targetPath.toString());
             result.put("fileSize", Files.size(targetPath));
@@ -296,29 +253,6 @@ public class FileStorageService {
         }
     }
 
-    /**
-     * 获取文件列表（USER和ADMIN都可以访问）
-     */
-    public List<FileInfoDTO> getFileList(String category, Pageable pageable) {
-        List<FileInfo> files;
-
-        if (category != null && !category.trim().isEmpty()) {
-            // 优化：校验分类有效性
-            validateCategory(category);
-            files = fileRepository.findByCategoryAndUploadStatusOrderByCreateTimeDesc(category, "completed");
-        } else {
-            files = fileRepository.findByUploadStatusOrderByCreateTimeDesc("completed");
-        }
-
-        // 分页处理
-        int start = (int) pageable.getOffset();
-        int end = Math.min((start + pageable.getPageSize()), files.size());
-        List<FileInfo> pagedFiles = files.subList(start, end);
-
-        return pagedFiles.stream()
-                .map(this::convertToDTO)
-                .collect(Collectors.toList());
-    }
 
     /**
      * 获取分页文件列表
@@ -326,12 +260,12 @@ public class FileStorageService {
     public Page<FileInfoDTO> getFilePage(String category, Pageable pageable) {
         Page<FileInfo> filePage;
 
-        if (category != null && !category.trim().isEmpty()) {
+        if (!Objects.equals(category, "all") && !category.trim().isEmpty()) {
             // 优化：校验分类有效性
             validateCategory(category);
-            filePage = fileRepository.findByCategoryAndUploadStatus(category, "completed", pageable);
+            filePage = fileRepository.findByCategory(category, pageable);
         } else {
-            filePage = fileRepository.findByUploadStatus("completed", pageable);
+            filePage = fileRepository.findAll(pageable);
         }
 
         return filePage.map(this::convertToDTO);
@@ -350,27 +284,19 @@ public class FileStorageService {
     /**
      * 获取文件详情（USER和ADMIN都可以访问）
      */
-    public FileInfoDTO getFileDetail(String fileKey) {
-        FileInfo fileInfo = fileRepository.findByFileKey(fileKey)
+    public FileInfoDTO getFileDetail(Long fileId) {
+        FileInfo fileInfo = fileRepository.findById(fileId)
                 .orElseThrow(() -> new RuntimeException("文件不存在"));
-
-        if (!"completed".equals(fileInfo.getUploadStatus())) {
-            throw new RuntimeException("文件未就绪");
-        }
-
         return convertToDTO(fileInfo);
     }
 
     /**
      * 下载文件（USER和ADMIN都可以访问）
      */
-    public Path downloadFile(String fileKey) {
-        FileInfo fileInfo = fileRepository.findByFileKey(fileKey)
+    public Path downloadFile(Long fileId) {
+        FileInfo fileInfo = fileRepository.findById(fileId)
                 .orElseThrow(() -> new RuntimeException("文件不存在"));
 
-        if (!"completed".equals(fileInfo.getUploadStatus())) {
-            throw new RuntimeException("文件未就绪");
-        }
 
         Path filePath = Paths.get(fileInfo.getFilePath());
         if (!Files.exists(filePath)) {
@@ -383,48 +309,48 @@ public class FileStorageService {
     /**
      * 获取ADMIN上传的文件列表（只有ADMIN可以访问）
      */
-    public List<FileInfoDTO> getMyUploads() {
-        User currentUser = getCurrentUser();
+//    public List<FileInfoDTO> getMyUploads() {
+//        User currentUser = getCurrentUser();
+//
+//        List<FileInfo> files = fileRepository.findByUploader(currentUser);
+//        return files.stream()
+//                .map(this::convertToDTO)
+//                .collect(Collectors.toList());
+//    }
 
-        List<FileInfo> files = fileRepository.findByUploader(currentUser);
-        return files.stream()
-                .map(this::convertToDTO)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * ADMIN删除自己上传的文件（只有ADMIN可以访问）
-     */
-    @Transactional
-    public void deleteMyFile(String fileKey) {
-        User currentUser = getCurrentUser();
-
-        FileInfo fileInfo = fileRepository.findByFileKey(fileKey)
-                .orElseThrow(() -> new RuntimeException("文件不存在"));
-
-        // 验证文件所有权
-        if (!fileInfo.getUploader().getId().equals(currentUser.getId())) {
-            throw new AccessDeniedException("无权删除此文件");
-        }
-
-        try {
-            // 删除物理文件
-            if (fileInfo.getFilePath() != null) {
-                Path filePath = Paths.get(fileInfo.getFilePath());
-                Files.deleteIfExists(filePath);
-            }
-
-            // 删除分片文件（如果存在）
-            cleanupChunkFiles(fileKey);
-
-            // 删除数据库记录
-            fileRepository.delete(fileInfo);
-
-        } catch (IOException e) {
-            log.error("删除文件失败", e);
-            throw new RuntimeException("删除文件失败");
-        }
-    }
+//    /**
+//     * ADMIN删除自己上传的文件（只有ADMIN可以访问）
+//     */
+//    @Transactional
+//    public void deleteMyFile(String fileKey) {
+//        User currentUser = getCurrentUser();
+//
+//        FileInfo fileInfo = fileRepository.findByFileKey(fileKey)
+//                .orElseThrow(() -> new RuntimeException("文件不存在"));
+//
+//        // 验证文件所有权
+//        if (!fileInfo.getUploader().getId().equals(currentUser.getId())) {
+//            throw new AccessDeniedException("无权删除此文件");
+//        }
+//
+//        try {
+//            // 删除物理文件
+//            if (fileInfo.getFilePath() != null) {
+//                Path filePath = Paths.get(fileInfo.getFilePath());
+//                Files.deleteIfExists(filePath);
+//            }
+//
+//            // 删除分片文件（如果存在）
+//            cleanupChunkFiles(fileKey);
+//
+//            // 删除数据库记录
+//            fileRepository.delete(fileInfo);
+//
+//        } catch (IOException e) {
+//            log.error("删除文件失败", e);
+//            throw new RuntimeException("删除文件失败");
+//        }
+//    }
 
     /**
      * 获取所有分类（USER和ADMIN都可以访问）
@@ -434,74 +360,62 @@ public class FileStorageService {
         return getValidCategories();
     }
 
-    /**
-     * 获取文件统计信息（只有ADMIN可以访问）
-     */
-    public Map<String, Object> getFileStats() {
-        validateAdminPermission();
-
-        Map<String, Object> stats = new HashMap<>();
-
-        // 总文件数
-        long totalFiles = fileRepository.count();
-        stats.put("totalFiles", totalFiles);
-
-        // 已完成文件数
-        List<FileInfo> completedFiles = fileRepository.findByUploadStatus("completed");
-        stats.put("completedFiles", completedFiles.size());
-
-        // 总文件大小
-        long totalSize = completedFiles.stream()
-                .mapToLong(FileInfo::getFileSize)
-                .sum();
-        stats.put("totalSize", totalSize);
-        stats.put("totalSizeFormatted", formatFileSize(totalSize));
-
-        // 按分类统计（优化：从数据库查询所有有效分类）
-        Map<String, Map<String, Object>> categoryStats = new HashMap<>();
-        List<String> validCategories = getValidCategories();
-        for (String category : validCategories) {
-            List<FileInfo> categoryFiles = fileRepository.findByCategoryAndUploadStatus(category, "completed");
-            long categorySize = categoryFiles.stream()
-                    .mapToLong(FileInfo::getFileSize)
-                    .sum();
-
-            Map<String, Object> categoryStat = new HashMap<>();
-            categoryStat.put("fileCount", categoryFiles.size());
-            categoryStat.put("totalSize", categorySize);
-            categoryStat.put("totalSizeFormatted", formatFileSize(categorySize));
-
-            categoryStats.put(category, categoryStat);
-        }
-        stats.put("categoryStats", categoryStats);
-
-        // 用户上传统计（只统计ADMIN）
-        List<User> admins = userRepository.findByRole(User.UserRole.ADMIN);
-        List<Map<String, Object>> adminStats = new ArrayList<>();
-
-        for (User admin : admins) {
-            List<FileInfo> adminFiles = fileRepository.findByUploader(admin);
-            long adminFileCount = adminFiles.stream()
-                    .filter(f -> "completed".equals(f.getUploadStatus()))
-                    .count();
-            long adminTotalSize = adminFiles.stream()
-                    .filter(f -> "completed".equals(f.getUploadStatus()))
-                    .mapToLong(FileInfo::getFileSize)
-                    .sum();
-
-            Map<String, Object> adminStat = new HashMap<>();
-            adminStat.put("userId", admin.getId());
-            adminStat.put("username", admin.getUsername());
-            adminStat.put("fileCount", adminFileCount);
-            adminStat.put("totalSize", adminTotalSize);
-            adminStat.put("totalSizeFormatted", formatFileSize(adminTotalSize));
-
-            adminStats.add(adminStat);
-        }
-        stats.put("adminStats", adminStats);
-
-        return stats;
-    }
+//    /**
+//     * 获取文件统计信息（只有ADMIN可以访问）
+//     */
+//    public Map<String, Object> getFileStats() {
+//        validateAdminPermission();
+//
+//        Map<String, Object> stats = new HashMap<>();
+//
+//        // 总文件数
+//        long totalFiles = fileRepository.count();
+//        stats.put("totalFiles", totalFiles);
+//
+//        // 已完成文件数
+//        List<FileInfo> completedFiles = fileRepository.findByUploadStatus("completed");
+//        stats.put("completedFiles", completedFiles.size());
+//
+//        // 总文件大小
+//        long totalSize = completedFiles.stream()
+//                .mapToLong(FileInfo::getFileSize)
+//                .sum();
+//        stats.put("totalSize", totalSize);
+//        stats.put("totalSizeFormatted", formatFileSize(totalSize));
+//
+//        // 按分类统计（优化：从数据库查询所有有效分类）
+//        Map<String, Map<String, Object>> categoryStats = new HashMap<>();
+//        List<String> validCategories = getValidCategories();
+//        for (String category : validCategories) {
+//            List<FileInfo> categoryFiles = fileRepository.findByCategory(category);
+//            long categorySize = categoryFiles.stream()
+//                    .mapToLong(FileInfo::getFileSize)
+//                    .sum();
+//
+//            Map<String, Object> categoryStat = new HashMap<>();
+//            categoryStat.put("fileCount", categoryFiles.size());
+//            categoryStat.put("totalSize", categorySize);
+//            categoryStat.put("totalSizeFormatted", formatFileSize(categorySize));
+//
+//            categoryStats.put(category, categoryStat);
+//        }
+//        stats.put("categoryStats", categoryStats);
+//
+//        // 用户上传统计（只统计ADMIN）
+//        List<User> admins = userRepository.findByRole(User.UserRole.ADMIN);
+//        List<Map<String, Object>> adminStats = new ArrayList<>();
+//
+//        for (User admin : admins) {
+//            List<FileInfo> adminFiles = fileRepository.findByUploader(admin);
+//            Map<String, Object> adminStat = new HashMap<>();
+//            adminStat.put("userId", admin.getId());
+//            adminStat.put("username", admin.getUsername());
+//            adminStats.add(adminStat);
+//        }
+//        stats.put("adminStats", adminStats);
+//
+//        return stats;
+//    }
 
     // ========== 辅助方法 ==========
 
@@ -509,20 +423,16 @@ public class FileStorageService {
         FileInfoDTO dto = new FileInfoDTO();
         dto.setId(fileInfo.getId());
         dto.setFileName(fileInfo.getFileName());
-        dto.setFileKey(fileInfo.getFileKey());
         dto.setFilePath(fileInfo.getFilePath());
-        dto.setFileType(fileInfo.getFileType());
         dto.setCategory(fileInfo.getCategory());
         dto.setFileSize(fileInfo.getFileSize());
-        dto.setUploadStatus(fileInfo.getUploadStatus());
         dto.setUserId(fileInfo.getUploader().getId());
-        dto.setUsername(fileInfo.getUploader().getUsername());
         dto.setCreateTime(fileInfo.getCreateTime());
         return dto;
     }
 
-    private void saveChunkFile(MultipartFile chunk, String fileKey, int chunkIndex) throws IOException {
-        Path chunkPath = getChunkPath(fileKey, chunkIndex);
+    private void saveChunkFile(MultipartFile chunk, Long fileId, int chunkIndex) throws IOException {
+        Path chunkPath = getChunkPath(fileId, chunkIndex);
         Files.createDirectories(chunkPath.getParent());
 
         try (InputStream inputStream = chunk.getInputStream();
@@ -535,17 +445,17 @@ public class FileStorageService {
         }
     }
 
-    private Path getChunkPath(String fileKey, int chunkIndex) {
-        return config.getChunkTempPath().resolve(fileKey).resolve(chunkIndex + ".chunk");
+    private Path getChunkPath(Long fileId, int chunkIndex) {
+        return config.getChunkTempPath().resolve(String.valueOf(fileId)).resolve(chunkIndex + ".chunk");
     }
 
-    private String getChunkKey(String fileKey, int chunkIndex) {
-        return fileKey + "_" + chunkIndex;
+    private String getChunkKey(Long fileId, int chunkIndex) {
+        return fileId + "_" + chunkIndex;
     }
 
-    private Path getTargetFilePath(String category, String fileName, String fileKey) {
+    private Path getTargetFilePath(String category, String fileName, Long fileId) {
         // 优化：文件名过滤特殊字符，避免路径异常
-        String safeFileName = fileKey + "_" + fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
+        String safeFileName = fileId + "_" + fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
         return config.getRootPath().resolve(category).resolve(safeFileName);
     }
 
@@ -585,8 +495,8 @@ public class FileStorageService {
         }
     }
 
-    private Map<Integer, Boolean> getChunkStatus(String fileKey) {
-        String redisKey = "upload:chunk:" + fileKey;
+    private Map<Integer, Boolean> getChunkStatus(Long fileId) {
+        String redisKey = "upload:chunk:" + fileId;
         @SuppressWarnings("unchecked")
         Map<String, Boolean> status = (Map<String, Boolean>) redisTemplate.opsForValue().get(redisKey);
         Map<Integer, Boolean> result = new HashMap<>();
@@ -596,16 +506,16 @@ public class FileStorageService {
         return result;
     }
 
-    private boolean checkAllChunksUploaded(String fileKey, int totalChunks) {
-        Map<Integer, Boolean> status = getChunkStatus(fileKey);
+    private boolean checkAllChunksUploaded(Long fileId, int totalChunks) {
+        Map<Integer, Boolean> status = getChunkStatus(fileId);
         if (status.size() != totalChunks) {
             return false;
         }
         return status.values().stream().allMatch(Boolean::booleanValue);
     }
 
-    private void cleanUpChunkStatus(String fileKey) {
-        String redisKey = "upload:chunk:" + fileKey;
+    private void cleanUpChunkStatus(Long fileId) {
+        String redisKey = "upload:chunk:" + fileId;
         redisTemplate.delete(redisKey);
     }
 
